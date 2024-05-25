@@ -19,11 +19,12 @@ import os.path
 # Try to import VideoCapture Library
 # Requires VideoCapture & PIL libraries
 vcAvailable = False
-import imp
+import importlib.util
+import cv2 as cv
 try:
-  imp.find_module('VideoCapture')
-  vcAvailable = True
+  importlib.util.find_spec('VideoCapture')
   import VideoCapture
+  vcAvailable = True
 except ImportError:
   print ("VideoCapture module not available")
 
@@ -305,7 +306,7 @@ class Setup:
 		
 		# find image paths
 		imgpaths = {}
-		buttnames = ['1','2','3','up','down','t','space','r','escape']
+		buttnames = ['1','2','3','up','down','t','space','r','escape','left','right']
 		buttstates = ['active','inactive']
 		for bn in buttnames:
 			imgpaths[bn] = {}
@@ -333,6 +334,10 @@ class Setup:
 		buttpos['t'] = leftx, self.dispsize[1]/2+camres[1]/2-buttsize[1]/2 # same level as snapshot bottom, to the left
 		buttpos['r'] = leftx, self.dispsize[1]/2 # halfway snapshot (==halfway display), to the left
 		buttpos['escape'] = buttsize[0], buttsize[1] # top left
+
+		#self-edits for the left and right button for stage2 
+		buttpos['left'] = rightx+buttsize[1]+5, self.dispsize[1]/2-buttsize[1] # above snapshot half, to the right
+		buttpos['right'] = rightx+buttsize[1]+5, self.dispsize[1]/2+buttsize[1] # below snapshot half, to the right
 		
 		# new dict for button properties (image, position, and rect)
 		self.buttons = {}
@@ -406,7 +411,7 @@ class Setup:
 			activetodraw.extend(['1'])
 		elif stagenr == 2:
 			title = "select pupil and set pupil detection bounds"
-			buttonstodraw.extend(['up','down'])
+			buttonstodraw.extend(['up','down','left','right'])
 			activetodraw.extend(['2'])
 		elif stagenr == 3:
 			title = "confirmation"
@@ -471,6 +476,9 @@ class Setup:
 		stagevars[3] = {}
 		stagevars[3]['confirmed'] = False
 
+		stagevars[4] = {}
+		stagevars[4]['locked'] = False
+
 		# set Booleans
 		running = True			# turns False upon quiting the GUI
 		
@@ -480,17 +488,18 @@ class Setup:
 		
 		# # # # #
 		# run GUI
+		locked_pos = []
 		while running:
 			
 			# # # # #
 			# general
-			
+
 			# draw stage
 			self.draw_stage(stagenr=stage)
 			
 			# get new snapshot, thresholded image, and pupil measures (only use pupil bounding rect after stage 1)
 			useprect = stagevars[0]['use_prect'] and stage > 1
-			self.img, self.thresholded, pupilpos, pupilsize, pupilbounds = self.tracker.give_me_all(pupilrect=useprect)
+			self.img, self.thresholded, pupilpos, pupilsize, pupilbounds, facepos, facesize, facebounds = self.tracker.give_me_all(pupilrect=useprect)
 			
 			# update settings
 			self.settings = self.tracker.settings
@@ -511,6 +520,14 @@ class Setup:
 			else:
 				self.draw_button(self.buttons['r']['inactive']['img'], self.buttons['r']['inactive']['pos'])
 
+			if stagevars[4]['locked']:
+				# draw active button
+				self.draw_button(self.buttons['r']['active']['img'], self.buttons['r']['active']['pos'])
+			# if threshold button is not active, draw inactive button
+			else:
+				self.draw_button(self.buttons['r']['inactive']['img'], self.buttons['r']['inactive']['pos'])
+
+
 			# check for input
 			inp, inptype = self.check_input()
 			
@@ -529,7 +546,12 @@ class Setup:
 					elif stagevars[1]['thresholdchange'] == 'down' and self.settings['threshold'] > 0:
 						self.settings['threshold'] -= 1
 					stagevars[1]['thresholdchange'] = None
-			
+
+				# draw face rect in image
+				try: pygame.draw.rect(self.img, (0,255,0),facebounds,1); pygame.draw.rect(self.thresholded, (0,255,0),facebounds,1)
+				except: print("facebounds=%s" % facebounds)
+					
+
 			# stage 2: select eye by clicking on it
 			if stage == 2:
 				# check if input is a mouse click
@@ -588,8 +610,30 @@ class Setup:
 				try: pygame.draw.circle(self.img, (255,0,0),pupilpos,3,0); pygame.draw.circle(self.thresholded, (255,0,0),pupilpos,3,0)
 				except: print("pupilpos=%s" % pupilpos)
 				# is settings are confirmed, stop running
-				if stagevars[3]['confirmed']:
+				if stagevars[3]['confirmed']: #CHANGE THIS TO BUTTON THAT READS POSITION OF OF BOXES, DEFINE A CIRCLE OF ALLOWANCE AROUND THE PUPIL AND NOTIFY IF DOT EXITS THAT CIRCLE !!!!!!!! EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE -
 					running = False
+				
+				#self-edits - to
+				if stagevars[4]['locked']:
+					x_coord = pupilpos[0]
+					y_coord = pupilpos[1]
+					threshold_amount = 5 # Change this to adjust the threshold limit
+					if locked_pos:
+						threshold = list(locked_pos[0])
+						if (x_coord > threshold[0]+threshold_amount) or (x_coord < threshold[0]-threshold_amount) or (y_coord > threshold[1]+threshold_amount) or (y_coord < threshold[1]-threshold_amount):
+							#Draw a yellow box around threshold area 
+							try: pygame.draw.rect(self.img,(255,255,0),pupilbounds,1); pygame.draw.rect(self.thresholded,(255,255,0),pupilbounds,1)
+							except: print("pupilbounds=%s" % pupilbounds)
+					else: 
+						locked_pos.insert(0 , pupilpos)
+						print("set pupilpos, locked_pos = %s",locked_pos, len(locked_pos))
+					
+				else:
+					locked_pos = []
+
+
+			# EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE -
+
 
 			# draw values
 			starty = self.dispsize[1]/2 - imgsize[1]/2
@@ -702,6 +746,7 @@ class Setup:
 			# click position
 			pos = inp[:]
 			
+			# Change this to include the positions of the new buttons!
 			# loop through buttons
 			for bn in self.buttons.keys():
 				# check if click position is on a button
@@ -737,6 +782,11 @@ class Setup:
 			# space should confirm settings
 			if inp == 'space':
 				stagevars[3]['confirmed'] = True
+
+			#self-edit
+			if inp == 'l':
+				state = stagevars[4]['locked']
+				stagevars[4]['locked'] = not(state)
 
 		# space should move to next stage (but not in stage 3)
 		if inp == 'space' and stage < 3:
@@ -979,6 +1029,52 @@ class CamEyeTracker:
 		
 		return self.settings['pupilpos'], pupil.count(), self.settings['pupilbounds']
 	
+	def find_face(self, image, facerect=False):
+		"""
+		Get the face center, bounds, and size, based on the input image.
+		
+		Arguments:
+		image       -- a pygame.Surface instance containing the image
+		
+		Keyword Arguments:
+		facerect    -- a Boolean indicating whether face searching rect should be applied or not (default = False)
+		
+		Returns:
+		facecenter, facesize, facebounds
+			facecenter: (x, y) position tuple that gives the face center within the image
+			facesize: number of pixels considered part of the face; returns (-1, -1) if no face found
+			facebounds: (x, y, width, height) tuple specifying the size of the largest rectangle fitting the face
+		"""
+		
+		# Convert the pygame surface to an OpenCV image
+		image_array = pygame.surfarray.array3d(image)
+		image_array = cv.transpose(image_array)
+		image_array = cv.cvtColor(image_array, cv.COLOR_RGB2BGR)
+		
+		ox, oy = 0, 0
+		
+		# Load the face detection classifier
+		face_cascade = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_frontalface_default.xml')
+		
+		# Detect faces in the image
+		gray_image = cv.cvtColor(image_array, cv.COLOR_BGR2GRAY)
+		faces = face_cascade.detectMultiScale(gray_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+		
+		if len(faces) > 0:
+			# Assume the largest face is the target
+			largest_face = max(faces, key=lambda rect: rect[2] * rect[3])
+			x, y, w, h = largest_face
+			facecenter = (x + w // 2 + ox, y + h // 2 + oy)
+			facebounds = (x + ox, y + oy, w, h)
+			facesize = w * h
+		else:
+			# No face detected
+			facecenter = (-1, -1)
+			facebounds = (-1, -1, -1, -1)
+			facesize = -1
+		
+		return facecenter, facesize, facebounds
+		
 	
 	def give_me_all(self, pupilrect=False):
 		
@@ -1013,9 +1109,10 @@ class CamEyeTracker:
 		
 		img = self.get_snapshot()
 		thimg = self.threshold_image(img)
+		fpos, farea, fbounds = self.find_face(thimg, pupilrect)
 		ppos, parea, pbounds = self.find_pupil(thimg, pupilrect)
 		
-		return img, thimg, ppos, parea, pbounds
+		return img, thimg, ppos, parea, pbounds, fpos, farea, fbounds
 
 
 	
@@ -1035,3 +1132,4 @@ class CamEyeTracker:
 		
 		# close camera
 		self.cam.stop()
+	
