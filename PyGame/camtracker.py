@@ -15,6 +15,7 @@ BUFFSEP = 'edwinisdebeste'
 # imports
 
 import os.path
+import time
 
 # Try to import VideoCapture Library
 # Requires VideoCapture & PIL libraries
@@ -489,6 +490,10 @@ class Setup:
 		# # # # #
 		# run GUI
 		locked_pos = []
+
+		#Flag to cancel auto-calibraion
+		calibration = True
+
 		while running:
 			
 			# # # # #
@@ -500,6 +505,7 @@ class Setup:
 			# get new snapshot, thresholded image, and pupil measures (only use pupil bounding rect after stage 1)
 			useprect = stagevars[0]['use_prect'] and stage > 1
 			self.img, self.thresholded, pupilpos, pupilsize, pupilbounds, facepos, facesize, facebounds = self.tracker.give_me_all(pupilrect=useprect)
+			print()
 			
 			# update settings
 			self.settings = self.tracker.settings
@@ -536,7 +542,128 @@ class Setup:
 			
 			# # # # #
 			# stage specific
+
+			"""
+			### Self-Edit: Auto Calibration Function
+			pupil_detected = True
+
+			print("facebounds ", facebounds, " pupilbounds ", pupilbounds, " pupilpos", pupilpos)
+
+			if (facebounds == (-1, -1, -1, -1)) | (pupilpos == (0, 0)):
+				if (self.settings['threshold'] < 250):
+					print("Increase threshold slightly to ensure detection")
+					self.settings['threshold'] += 5
+					calibration = False
+					print("up threshold",self.settings['threshold'])
+				else:
+					print("Reset Thres")
+					self.settings['threshold'] = 125
+
+				pupil_detected = False
 			
+			print("pupil_detected", pupil_detected)
+
+			if (stage == 2) and (pupil_detected == True) and (self.settings['threshold'] < 255):
+				print("legso")
+
+				# Draw face rectangle in the image
+				try:
+					pygame.draw.rect(self.img, (0, 255, 0), facebounds, 1)
+					pygame.draw.rect(self.thresholded, (0, 255, 0), facebounds, 1)
+					print("this is facebounds ", facebounds)
+					print("this is pupilpos ", pupilpos)
+				except Exception as e:
+					print(f"Error drawing facebounds: {e}")
+				
+				# Find and draw face position
+				stagevars[2]['clickpos'] = facepos
+				self.settings['pupilpos'] = stagevars[2]['clickpos'][:]
+
+				x = stagevars[2]['clickpos'][0] - stagevars[2]['prectsize'][0] / 2
+				y = stagevars[2]['clickpos'][1] - stagevars[2]['prectsize'][1] / 2
+				stagevars[2]['prect'] = pygame.Rect(x, y, stagevars[2]['prectsize'][0], stagevars[2]['prectsize'][1])
+				self.settings['pupilrect'] = stagevars[2]['prect']
+
+				# Try drawing pupil rectangle to check if it's detected
+				try:
+					#Draw Face rect
+					pygame.draw.rect(self.thresholded, (0, 0, 255), self.settings['pupilrect'], 2)
+					print(f"Threshold {self.settings['threshold']} - Face detected and drawn")
+				except Exception as e:
+					print(f"Threshold {self.settings['threshold']} - Face not detected: {e}")
+
+				# Decrease threshold until the pupil is no longer detected i.e. recorded pupil position is outside face box
+				time.sleep(0.001)
+			
+				#facebounds = (bottomleftx, bottomlefty, width, height)
+				x_coord = pupilpos[0]
+				y_coord = pupilpos[1]
+				x0_face = facebounds[0]
+				x1_face = facebounds[0]+facebounds[2]
+				y0_face = facebounds[1]
+				y1_face = facebounds[1]+facebounds[3]
+
+				print("this is facebounds ", facebounds)
+				print("this is ppos ", pupilpos)
+
+				#If pupil within facebox, assumed to be correctly identified, reduce threshold
+				if (x0_face <= pupilpos[0] <= x1_face) & (y0_face <= pupilpos[1] <= y1_face) and (calibration == True):
+					print("in facebox, thres at", self.settings['threshold'])
+					self.settings['threshold'] -= 1
+					print("down threshold",self.settings['threshold'])
+					
+				#If pupil not in facebox, assume not indentified, recalibrate
+				else:
+					print("not in facebox")
+					calibration = True
+					pupil_detected = False
+
+				# Draw pupil center and pupil bounds in the image
+				try:
+					#Draw blue eye rect
+					pygame.draw.rect(self.img, (0, 255, 0), pupilbounds, 1)
+					#Draw red pupil rect
+					pygame.draw.rect(self.thresholded, (255, 0, 0), pupilbounds, 1)
+				except Exception as e:
+					print(f"Error drawing pupilbounds: {e}")
+
+				try:
+					pygame.draw.circle(self.img, (255, 0, 0), pupilpos, 3, 0)
+					pygame.draw.circle(self.thresholded, (255, 0, 0), pupilpos, 3, 0)
+				except Exception as e:
+					print(f"Error drawing pupil position: {e}")
+
+				# If settings are confirmed, stop running
+				if stagevars[3]['confirmed']:
+					running = False
+
+				# Handle locked position logic
+				if stagevars[4]['locked']:
+					x_coord = pupilpos[0]
+					y_coord = pupilpos[1]
+					threshold_amount = 5  # Change this to adjust the threshold limit
+
+					if locked_pos:
+						threshold = list(locked_pos[0])
+						if (x_coord > threshold[0] + threshold_amount) or (x_coord < threshold[0] - threshold_amount) or (y_coord > threshold[1] + threshold_amount) or (y_coord < threshold[1] - threshold_amount):
+							# Draw a yellow box around threshold area
+							try:
+								pygame.draw.rect(self.img, (255, 255, 0), pupilbounds, 1)
+								pygame.draw.rect(self.thresholded, (255, 255, 0), pupilbounds, 1)
+							except Exception as e:
+								print(f"Error drawing threshold pupilbounds: {e}")
+					else:
+						locked_pos.insert(0, pupilpos)
+						print(f"Set pupilpos, locked_pos = {locked_pos}, length = {len(locked_pos)}")
+				else:
+					locked_pos = []
+
+			#If pupil or face not detected, reset contrast threshold, try again			
+			else:
+				pass
+
+
+			"""
 			# stage 1: setting pupil threshold
 			if stage == 1:
 				# set camera threshold
@@ -610,7 +737,7 @@ class Setup:
 				try: pygame.draw.circle(self.img, (255,0,0),pupilpos,3,0); pygame.draw.circle(self.thresholded, (255,0,0),pupilpos,3,0)
 				except: print("pupilpos=%s" % pupilpos)
 				# is settings are confirmed, stop running
-				if stagevars[3]['confirmed']: #CHANGE THIS TO BUTTON THAT READS POSITION OF OF BOXES, DEFINE A CIRCLE OF ALLOWANCE AROUND THE PUPIL AND NOTIFY IF DOT EXITS THAT CIRCLE !!!!!!!! EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE -
+				if stagevars[3]['confirmed']:
 					running = False
 				
 				#self-edits - to
@@ -631,7 +758,7 @@ class Setup:
 				else:
 					locked_pos = []
 
-
+			""""""
 			# EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE -
 
 
@@ -1107,7 +1234,9 @@ class CamEyeTracker:
 						in which the pupil would fit
 		"""
 		
-		img = self.get_snapshot()
+		try: img = self.get_snapshot() 
+		except: print("Cant snapshot")
+		
 		thimg = self.threshold_image(img)
 		fpos, farea, fbounds = self.find_face(thimg, pupilrect)
 		ppos, parea, pbounds = self.find_pupil(thimg, pupilrect)
