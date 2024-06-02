@@ -16,18 +16,19 @@ BUFFSEP = 'edwinisdebeste'
 
 import os.path
 import time
+import numpy as np
 
 # Try to import VideoCapture Library
 # Requires VideoCapture & PIL libraries
 vcAvailable = False
 import importlib.util
-import cv2 as cv
+
 try:
-  importlib.util.find_spec('VideoCapture')
-  import VideoCapture
+  importlib.util.find_spec('cv2')
+  import cv2 as cv
   vcAvailable = True
 except ImportError:
-  print ("VideoCapture module not available")
+  print ("VideoCapture from OpenCV not available")
 
 try:
 	import pygame
@@ -151,7 +152,7 @@ class Setup:
 		self.disp.fill(self.bgc)
 
 		# set some more properties
-		self.img = pygame.surface.Surface(self.tracker.get_size())	# empty surface, gets filled out with camera images
+		self.img = pygame.surface.Surface((self.tracker.get_size()))	# empty surface, gets filled out with camera images
 		self.settings = {'pupilcol':(0,0,0), \
 					'threshold':100, \
 					'nonthresholdcol':(100,100,255,255), \
@@ -430,11 +431,10 @@ class Setup:
 			self.draw_button(self.buttons[buttname]['active']['img'],self.buttons[buttname]['active']['pos'])
 		
 		# draw title
-		titsize = self.font.size(title) # author note: LOL, 'titsize'!
+		titsize = self.font.size(title)
 		titpos = self.dispsize[0]/2-titsize[0]/2, self.dispsize[1]/2-(self.tracker.get_size()[1]/2+titsize[1])
 		titsurf = self.font.render(title, True, self.fgc)
 		self.disp.blit(titsurf,titpos)
-	
 
 	def run_GUI(self):
 		
@@ -462,14 +462,14 @@ class Setup:
 		
 		stagevars[0] = {}
 		stagevars[0]['show_threshimg'] = False # False for showing snapshots, True for showing thresholded snapshots
-		stagevars[0]['use_prect'] = True # False for no pupil search limits, True for pupul rect
+		stagevars[0]['use_prect'] = True # False for no pupil search limits, True for pupil rect
 
 		stagevars[1] =  {}
 		stagevars[1]['thresholdchange'] = None # None, 'up', or 'down'
 		
 		stagevars[2] = {}
 		stagevars[2]['clickpos'] = 0,0 # becomes a (x,y) tuple, indicating click position within the webcam's snapshots (to determine pupil rect)
-		stagevars[2]['prectsize'] = 100,50 # pupilrectsize
+		stagevars[2]['prectsize'] = 100,100 # pupilrectsize
 		stagevars[2]['prect'] = pygame.Rect(stagevars[2]['clickpos'][0],stagevars[2]['clickpos'][1],stagevars[2]['prectsize'][0],stagevars[2]['prectsize'][1]) # rect around pupil, in which the pupil is expected to be
 		stagevars[2]['vprectchange'] = None  # None, 'up', or 'down'
 		stagevars[2]['hprectchange'] = None  # None, 'right', or 'left'
@@ -480,10 +480,14 @@ class Setup:
 		stagevars[4] = {}
 		stagevars[4]['locked'] = False
 
+		stagevars[5] = {}
+		stagevars[5]['re_calib'] = False
+
 		# set Booleans
 		running = True			# turns False upon quiting the GUI
 		
-		# set image variables
+		# set image variables, blitpos is the bottom left corner of the image frame 
+		
 		imgsize = self.img.get_size()
 		blitpos = (self.dispsize[0]/2-imgsize[0]/2, self.dispsize[1]/2-imgsize[1]/2)
 		
@@ -492,7 +496,7 @@ class Setup:
 		locked_pos = []
 
 		#Flag to cancel auto-calibraion
-		calibration = True
+		start_auto_calibration = True
 
 		while running:
 			
@@ -504,8 +508,8 @@ class Setup:
 			
 			# get new snapshot, thresholded image, and pupil measures (only use pupil bounding rect after stage 1)
 			useprect = stagevars[0]['use_prect'] and stage > 1
+			print("useprect", useprect)
 			self.img, self.thresholded, pupilpos, pupilsize, pupilbounds, facepos, facesize, facebounds = self.tracker.give_me_all(pupilrect=useprect)
-			print()
 			
 			# update settings
 			self.settings = self.tracker.settings
@@ -533,6 +537,13 @@ class Setup:
 			else:
 				self.draw_button(self.buttons['r']['inactive']['img'], self.buttons['r']['inactive']['pos'])
 
+			if stagevars[5]['re_calib']:
+				# draw active button
+				self.draw_button(self.buttons['r']['active']['img'], self.buttons['r']['active']['pos'])
+			# if threshold button is not active, draw inactive button
+			else:
+				self.draw_button(self.buttons['r']['inactive']['img'], self.buttons['r']['inactive']['pos'])
+
 
 			# check for input
 			inp, inptype = self.check_input()
@@ -543,30 +554,34 @@ class Setup:
 			# # # # #
 			# stage specific
 
-			"""
+			""""""
 			### Self-Edit: Auto Calibration Function
 			pupil_detected = True
 
 			print("facebounds ", facebounds, " pupilbounds ", pupilbounds, " pupilpos", pupilpos)
 
-			if (facebounds == (-1, -1, -1, -1)) | (pupilpos == (0, 0)):
-				if (self.settings['threshold'] < 250):
+			if (pupilpos == (-1, -1)) or (pupilpos == (0,0)) or (stagevars[5]['re_calib'] == True):
+				if (self.settings['threshold'] < 200):
 					print("Increase threshold slightly to ensure detection")
-					self.settings['threshold'] += 5
-					calibration = False
+					self.settings['threshold'] += 30
+					start_auto_calibration = False
 					print("up threshold",self.settings['threshold'])
 				else:
 					print("Reset Thres")
-					self.settings['threshold'] = 125
+					self.settings['threshold'] = 100
+					start_auto_calibration = True
+					stagevars[5]['re_calib'] = False
 
 				pupil_detected = False
 			
 			print("pupil_detected", pupil_detected)
+			print(stage, pupil_detected, self.settings['threshold'])
 
-			if (stage == 2) and (pupil_detected == True) and (self.settings['threshold'] < 255):
+			if (stage == 2) and (pupil_detected == True) and (self.settings['threshold'] < 254):
 				print("legso")
 
 				# Draw face rectangle in the image
+				"""
 				try:
 					pygame.draw.rect(self.img, (0, 255, 0), facebounds, 1)
 					pygame.draw.rect(self.thresholded, (0, 255, 0), facebounds, 1)
@@ -576,51 +591,57 @@ class Setup:
 					print(f"Error drawing facebounds: {e}")
 				
 				# Find and draw face position
+				
 				stagevars[2]['clickpos'] = facepos
 				self.settings['pupilpos'] = stagevars[2]['clickpos'][:]
+				print(stagevars[2]['clickpos'], self.settings['pupilpos'])
 
-				x = stagevars[2]['clickpos'][0] - stagevars[2]['prectsize'][0] / 2
-				y = stagevars[2]['clickpos'][1] - stagevars[2]['prectsize'][1] / 2
-				stagevars[2]['prect'] = pygame.Rect(x, y, stagevars[2]['prectsize'][0], stagevars[2]['prectsize'][1])
+				x = facepos[0] - stagevars[2]['prectsize'][0] / 1.5
+				y = facepos[1] - stagevars[2]['prectsize'][1] / 1.5
+				stagevars[2]['prect'] = pygame.Rect(x, y, (stagevars[2]['prectsize'][0])/2, (stagevars[2]['prectsize'][1])/2)
 				self.settings['pupilrect'] = stagevars[2]['prect']
+				print(self.settings['pupilrect'])
+				"""
 
-				# Try drawing pupil rectangle to check if it's detected
+				print("self.settings['pupilrect']", self.settings['pupilrect'])
+				# Try drawing pupil rectangle (blue) to check if it's detected
 				try:
-					#Draw Face rect
 					pygame.draw.rect(self.thresholded, (0, 0, 255), self.settings['pupilrect'], 2)
 					print(f"Threshold {self.settings['threshold']} - Face detected and drawn")
 				except Exception as e:
 					print(f"Threshold {self.settings['threshold']} - Face not detected: {e}")
 
-				# Decrease threshold until the pupil is no longer detected i.e. recorded pupil position is outside face box
 				time.sleep(0.001)
 			
 				#facebounds = (bottomleftx, bottomlefty, width, height)
 				x_coord = pupilpos[0]
 				y_coord = pupilpos[1]
-				x0_face = facebounds[0]
-				x1_face = facebounds[0]+facebounds[2]
-				y0_face = facebounds[1]
-				y1_face = facebounds[1]+facebounds[3]
+				x0_face = pupilbounds[0] #facebounds[0]
+				x1_face = pupilbounds[0]+pupilbounds[2] #facebounds[0]+facebounds[2]
+				y0_face = pupilbounds[1] #facebounds[1]
+				y1_face = pupilbounds[1]+pupilbounds[3] #facebounds[1]+facebounds[3]
 
-				print("this is facebounds ", facebounds)
+				print("this is pupilbounds ", pupilbounds)
 				print("this is ppos ", pupilpos)
 
 				#If pupil within facebox, assumed to be correctly identified, reduce threshold
-				if (x0_face <= pupilpos[0] <= x1_face) & (y0_face <= pupilpos[1] <= y1_face) and (calibration == True):
+				if (x0_face <= pupilpos[0] <= x1_face) & (y0_face <= pupilpos[1] <= y1_face):
 					print("in facebox, thres at", self.settings['threshold'])
-					self.settings['threshold'] -= 1
-					print("down threshold",self.settings['threshold'])
+					
+					if(start_auto_calibration == True):
+						# Decrease threshold until the pupil is no longer detected i.e. recorded pupil position is outside face box
+						self.settings['threshold'] -= 1
+						print("down threshold",self.settings['threshold'])
 					
 				#If pupil not in facebox, assume not indentified, recalibrate
 				else:
 					print("not in facebox")
-					calibration = True
+					start_auto_calibration = True
 					pupil_detected = False
 
-				# Draw pupil center and pupil bounds in the image
+				# Draw pupil center and pupil bounds in the image 
 				try:
-					#Draw blue eye rect
+					#Draw green eye rect
 					pygame.draw.rect(self.img, (0, 255, 0), pupilbounds, 1)
 					#Draw red pupil rect
 					pygame.draw.rect(self.thresholded, (255, 0, 0), pupilbounds, 1)
@@ -660,6 +681,7 @@ class Setup:
 
 			#If pupil or face not detected, reset contrast threshold, try again			
 			else:
+				print("skipped")
 				pass
 
 
@@ -758,7 +780,7 @@ class Setup:
 				else:
 					locked_pos = []
 
-			""""""
+			"""
 			# EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE - EDIT HERE -
 
 
@@ -773,6 +795,21 @@ class Setup:
 				tsurf = self.sfont.render(vals[i], True, self.fgc)
 				self.disp.blit(tsurf,tpos)
 			
+			# draw new image 
+			"""
+			try: image = self.thresholded 
+			except: image = self.img
+
+			#Edit here to change the image size drawn
+			sprite_img = image.subsurface(300,400,75,75)
+			sprite_img = pygame.transform.scale(sprite_img, (640,480))
+
+			if stagevars[0]['show_threshimg']:
+				self.disp.blit(image, blitpos)
+			else:
+				self.disp.blit(image, blitpos)
+			"""
+
 			# draw new image
 			if stagevars[0]['show_threshimg']:
 				self.disp.blit(self.thresholded, blitpos)
@@ -811,7 +848,6 @@ class Setup:
 		
 		return self.tracker
 
-			
 	def check_input(self):
 		
 		"""Checks if there is any keyboard or mouse input, then returns
@@ -900,6 +936,14 @@ class Setup:
 				stagevars[2]['vprectchange'] = inp
 			elif inp in ['left','right']:
 				stagevars[2]['hprectchange'] = inp
+
+			#self-edit
+			if inp == 'l':
+				state = stagevars[4]['locked']
+				stagevars[4]['locked'] = not(state)
+
+			if inp == "c":
+				stagevars[5]['re_calib'] = True
 		
 		# stage 3
 		elif stage == 3:
@@ -944,13 +988,21 @@ class Setup:
 		
 		# return the changed variables
 		return stage, stagevars
+	
+	def resize_img(self, image):
+		#Edit here to change the image size drawn
+		sprite_img = image.subsurface(350,220,75,75)
+		sprite_img = pygame.transform.scale(sprite_img, self.tracker.get_size())
+
+		return sprite_img
+	
 
 
 class CamEyeTracker:
 	
 	"""The CamEyeTracker class uses your webcam as an eye tracker"""
 	
-	def __init__(self, device=None, camres=(640,480)):
+	def __init__(self, device=None, camres=(640,480), zoom_factor=8.0):
 		
 		"""Initializes a CamEyeTracker instance
 		
@@ -978,10 +1030,14 @@ class CamEyeTracker:
 					device = available[0]
 			
 			# start the webcam
-			self.cam = pygame.camera.Camera(device, camres, 'RGB')
+			self.cam = pygame.camera.Camera(device,(640,480),'RGB')
 			self.cam.start()
 		else:
-			self.cam = VideoCapture.Device()
+			self.cam = cv.VideoCapture(0)
+			self.cam.set(cv.CAP_PROP_FRAME_WIDTH, 2048)
+			self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)
+			self.zoom_factor = zoom_factor
+
 			
 		# get the webcam resolution (get_size not available on all systems)
 		try:
@@ -994,7 +1050,7 @@ class CamEyeTracker:
 					'threshold':100, \
 					'nonthresholdcol':(100,100,255,255), \
 					'pupilpos':(-1,-1), \
-					'pupilrect':pygame.Rect(self.camres[0]/2-50,self.camres[1]/2-25,100,50), \
+					'pupilrect':pygame.Rect(self.camres[0]/2-50,self.camres[1]/2-25,100,100), \
 					'pupilbounds': [0,0,0,0], \
 					'':None					
 					}
@@ -1018,26 +1074,52 @@ class CamEyeTracker:
 
 	
 	def get_snapshot(self):
+		"""Returns a snapshot, without doing any processing
 		
-		"""Returns a snapshot, without doing any any processing
-		
-		arguments
+		Arguments:
 		None
 		
-		keyword arguments
+		Keyword arguments:
 		None
 		
-		returns
-		snapshot		--	a pygame.surface.Surface instance,
-						containing a snapshot taken with the webcam
+		Returns:
+		snapshot -- a pygame.surface.Surface instance,
+					containing a snapshot taken with the webcam
 		"""
 		global vcAvailable
 		if vcAvailable:
-			image = self.cam.getImage()
-			mode = image.mode
-			size = image.size
-			data = image.tostring()
-			return pygame.image.fromstring(data, size, mode)
+			ret, frame = self.cam.read()
+			if not ret:
+				print("Error: Unable to capture frame from the camera.")
+				return None
+
+			if self.zoom_factor > 1.0:
+				h, w, _ = frame.shape
+				center_x, center_y = w // 2, h // 2
+				radius_x, radius_y = int(w // (2 * self.zoom_factor)), int(h // (2 * self.zoom_factor))
+				min_x, max_x = center_x - radius_x, center_x + radius_x
+				min_y, max_y = center_y - radius_y, center_y + radius_y
+
+				cropped_frame = frame[min_y:max_y, min_x:max_x]
+				frame = cv.resize(cropped_frame, (w, h), interpolation=cv.INTER_LINEAR)
+			
+			try:
+				frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+
+				# Resize the frame to match the display size
+				frame = cv.resize(frame, np.array(self.camres))
+				frame = np.swapaxes(frame, 0, 1)
+				
+				
+				# Convert the frame to a NumPy array
+				frame = np.array(frame, dtype=np.uint8)
+				pygame_frame = pygame.surfarray.make_surface(frame)
+
+			except Exception as e:
+				print(e)
+			
+			return pygame_frame
+
 		else:
 			return self.cam.get_image()
 		
@@ -1067,6 +1149,7 @@ class CamEyeTracker:
 	
 	
 	def find_pupil(self, thresholded, pupilrect=False):
+		print("pupilrect ", pupilrect)
 		
 		"""Get the pupil center, bounds, and size, based on the thresholded
 		image; please note that the pupil bounds and size are very
@@ -1234,8 +1317,11 @@ class CamEyeTracker:
 						in which the pupil would fit
 		"""
 		
-		try: img = self.get_snapshot() 
-		except: print("Cant snapshot")
+		try: 
+			img = self.get_snapshot() 
+			print(img)
+		except: 
+			print("Cant snapshot")
 		
 		thimg = self.threshold_image(img)
 		fpos, farea, fbounds = self.find_face(thimg, pupilrect)
@@ -1243,8 +1329,6 @@ class CamEyeTracker:
 		
 		return img, thimg, ppos, parea, pbounds, fpos, farea, fbounds
 
-
-	
 	def close(self):
 		
 		"""Shuts down connection to the webcam and closes logfile

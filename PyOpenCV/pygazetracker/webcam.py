@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from __init__ import _message
-from generic import EyeTracker
+from .__init__ import _message
+from .generic import EyeTracker
 
 import cv2
 import PIL

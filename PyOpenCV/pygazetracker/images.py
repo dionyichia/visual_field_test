@@ -4,9 +4,10 @@ from __init__ import _message
 from generic import EyeTracker
 
 import os
-import cv2
 import PIL
 import numpy
+import cv2
+
 
 
 # # # # #
@@ -63,7 +64,7 @@ def setup(imgdir=None, mode=u'RGB', **kwargs):
 			# Briefly wait for a key press
 			keycode = cv2.waitKey(10)
 			if keycode != -1:
-				print keycode
+				print (keycode)
 			if keycode == up:
 				tracker._pupt += 1
 			elif keycode == down:
