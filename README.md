@@ -1,5 +1,23 @@
 webcam eye tracker
 ==================
+To run eye tracking software, run the GUIttest.py file
+
+version 1 
+This version has a zoomed in image. 
+
+Instructions to run:
+1. Press any key to run program
+2. Align either eye to the center of the green box, ensure eye is within box
+3. Once eye is in place, press space
+4. Wait for calibration, once the box around the pupil is of constant size, press space
+4.1 To recalibrate, recenter eye and press "C"
+5. Ignore confirmation stage for now, press space
+5.1 To lock position of eye, press "L" (useless for now, plan to use this so that if eye moves the test will pause)
+6. Visual Field test will commence with eye tracker running in background 
+
+version 2
+This version contains the orignal code plus a few edits. This has a normal full face view.
+Ignore this version, might have accidentally changed something, doesnt rly work. 
 
 version 0.1.2 (12-Oct-2013)
 
