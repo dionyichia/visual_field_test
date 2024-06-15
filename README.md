@@ -1,6 +1,6 @@
 webcam eye tracker
 ==================
-To run eye tracking software, run the GUIttest.py file
+To run eye tracking software, run the GUItest.py file
 
 version 1 
 This version has a zoomed in image. 

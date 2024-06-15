@@ -678,11 +678,12 @@ class Setup:
 				#If first intialisation, Initalise flag and time, start actual test
 				if test_start == 0: 
 					test_start = pygame.time.get_ticks() 
-					test.start_test(test_start, test_start)
+					interface = test.Test_interface(self.disp.get_size())
+					test.Test_interface.update_test(interface, test_start, test_start)
 				
 				else:
 					current_time = pygame.time.get_ticks() 
-					test.start_test(test_start, current_time)
+					test.Test_interface.update_test(interface, test_start, current_time)
 
 			# update display
 			pygame.display.flip()
@@ -860,15 +861,6 @@ class Setup:
 		# return the changed variables
 		return stage, stagevars
 	
-	def resize_img(self, image):
-		#Edit here to change the image size drawn
-		sprite_img = image.subsurface(350,220,75,75)
-		sprite_img = pygame.transform.scale(sprite_img, self.tracker.get_size())
-
-		return sprite_img
-	
-
-
 class CamEyeTracker:
 	
 	"""The CamEyeTracker class uses your webcam as an eye tracker"""
